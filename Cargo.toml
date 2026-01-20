@@ -1,0 +1,11 @@
+[package]
+name = "triangle_based_rendering"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash = "0.38.0"
+gpu-allocator = { version = "0.28.0", default-features = false, features = ["std", "vulkan"] }
+parking_lot = "0.12.5"
+scope-guard = "1.2.0"
+winit = "0.30.12"
