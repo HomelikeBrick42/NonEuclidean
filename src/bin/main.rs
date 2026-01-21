@@ -4,8 +4,8 @@ use gpu_allocator::MemoryLocation;
 use scope_guard::scope_guard;
 use std::sync::Arc;
 use triangle_based_rendering::{
-    Buffer, Device, Instance, RenderResult, RenderSync, ResourceToDestroy, Surface, Swapchain,
-    transition_image,
+    Buffer, Device, Instance, RenderResult, RenderSync, ResourceToDestroy, Shader, Surface,
+    Swapchain, include_spirv, transition_image,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -46,37 +46,12 @@ fn main() {
         floats[0] = 0.5;
     }
 
-    let shader_create_info = vk::ShaderModuleCreateInfo::default().code(
-        const {
-            #[repr(C)]
-            struct Aligned<T: ?Sized> {
-                align: [u32; 0],
-                bytes: T,
-            }
-
-            const BYTES: &Aligned<[u8]> = &Aligned {
-                align: [],
-                bytes: *include_bytes!(concat!(env!("OUT_DIR"), "/shaders/full_screen_quad.spv")),
-            };
-
-            assert!(BYTES.bytes.len().is_multiple_of(4));
-            unsafe {
-                core::slice::from_raw_parts(
-                    BYTES.bytes.as_ptr().cast::<u32>(),
-                    BYTES.bytes.len() / 4,
-                )
-            }
-        },
-    );
-    let shader = scope_guard!(
-        |shader| unsafe {
-            device.schedule_destroy_resource(
-                device.current_timeline_counter(),
-                ResourceToDestroy::ShaderModule(shader),
-            );
-        },
-        unsafe { device.create_shader_module(&shader_create_info, device.allocator()) }.unwrap()
-    );
+    let shader = unsafe {
+        Shader::new(
+            device.clone(),
+            include_spirv!(concat!(env!("OUT_DIR"), "/shaders/full_screen_quad.spv")),
+        )
+    };
 
     #[derive(Clone, Copy, NoUninit)]
     #[repr(C)]
@@ -109,11 +84,11 @@ fn main() {
     let shader_stages = [
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
-            .module(*shader)
+            .module(shader.handle())
             .name(c"vertex"),
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(*shader)
+            .module(shader.handle())
             .name(c"fragment"),
     ];
     let viewport_state = vk::PipelineViewportStateCreateInfo::default()
