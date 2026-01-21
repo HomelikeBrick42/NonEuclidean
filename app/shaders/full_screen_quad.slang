@@ -1,6 +1,8 @@
+import include.triangles;
+
 struct Info
 {
-    float *buffer;
+    Triangle *triangles;
     float aspect;
 }
 

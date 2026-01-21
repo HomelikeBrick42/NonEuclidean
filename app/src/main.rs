@@ -1,5 +1,5 @@
 use ash::vk;
-use bytemuck::NoUninit;
+use bytemuck::{AnyBitPattern, NoUninit};
 use gpu_allocator::MemoryLocation;
 use rendering::{
     Buffer, Device, Instance, RenderResult, RenderSync, ResourceToDestroy, Shader, Surface,
@@ -31,19 +31,46 @@ fn main() {
     let device = Arc::new(Device::new(instance.clone()));
     let mut swapchain = Swapchain::new(device.clone(), surface);
 
-    let mut buffer = Buffer::new(
+    #[derive(Clone, Copy, NoUninit)]
+    #[repr(C)]
+    struct Triangle {
+        // ax is 0
+        // ay is 0
+        bx: f32,
+        // by is 0
+        cx: f32,
+        cy: f32,
+
+        _padding1: u32,
+
+        edge_triangles: [u32; 3],
+        edge_indices: [u8; 3],
+
+        _padding2: u8,
+    }
+
+    let triangles = [Triangle {
+        bx: 2.0,
+        cx: 1.0,
+        cy: 1.0,
+        _padding1: 0,
+        edge_triangles: [u32::MAX; 3],
+        edge_indices: [u8::MAX; 3],
+        _padding2: 0,
+    }];
+
+    let mut triangles_buffer = Buffer::new(
         device.clone(),
-        "Test Buffer",
+        "Triangles Buffer",
         MemoryLocation::CpuToGpu,
-        128,
+        size_of_val::<[_]>(&triangles) as _,
         vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
         false,
     );
 
     {
-        let floats =
-            bytemuck::cast_slice_mut::<u8, f32>(unsafe { buffer.get_mapped_mut() }.unwrap());
-        floats[0] = 0.5;
+        let triangles_buffer = unsafe { triangles_buffer.get_mapped_mut() }.unwrap();
+        triangles_buffer.copy_from_slice(bytemuck::cast_slice(&triangles));
     }
 
     let shader = unsafe {
@@ -56,9 +83,9 @@ fn main() {
     #[derive(Clone, Copy, NoUninit)]
     #[repr(C)]
     struct PushConstants {
-        buffer: vk::DeviceAddress,
+        triangles: vk::DeviceAddress,
         aspect: f32,
-        padding: u32,
+        _padding1: u32,
     }
 
     let push_constant_range = vk::PushConstantRange::default()
@@ -196,9 +223,9 @@ fn main() {
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 bytemuck::bytes_of(&PushConstants {
-                    buffer: buffer.device_address(),
+                    triangles: triangles_buffer.device_address(),
                     aspect: width as f32 / height as f32,
-                    padding: 0,
+                    _padding1: 0,
                 }),
             );
             device.cmd_draw(command_buffer, 4, 1, 0, 0);
