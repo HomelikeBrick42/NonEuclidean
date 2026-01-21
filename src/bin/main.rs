@@ -41,7 +41,8 @@ fn main() {
     );
 
     {
-        let floats = bytemuck::cast_slice_mut::<u8, f32>(unsafe { buffer.get_mapped_mut() }.unwrap());
+        let floats =
+            bytemuck::cast_slice_mut::<u8, f32>(unsafe { buffer.get_mapped_mut() }.unwrap());
         floats[0] = 0.5;
     }
 
@@ -158,6 +159,8 @@ fn main() {
         }
         .unwrap()[0]
     );
+
+    drop(shader);
 
     let render = |command_buffer: vk::CommandBuffer,
                   image_layout: &mut vk::ImageLayout,
