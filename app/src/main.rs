@@ -1,12 +1,12 @@
 use ash::vk;
 use bytemuck::NoUninit;
 use gpu_allocator::MemoryLocation;
-use scope_guard::scope_guard;
-use std::sync::Arc;
-use triangle_based_rendering::{
+use rendering::{
     Buffer, Device, Instance, RenderResult, RenderSync, ResourceToDestroy, Shader, Surface,
     Swapchain, include_spirv, transition_image,
 };
+use scope_guard::scope_guard;
+use std::sync::Arc;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},

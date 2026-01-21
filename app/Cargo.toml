@@ -1,0 +1,15 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash = { workspace = true }
+gpu-allocator = { workspace = true }
+bytemuck = { workspace = true }
+rendering = { workspace = true }
+scope-guard = { workspace = true }
+winit = { workspace = true }
+
+[lints]
+workspace = true

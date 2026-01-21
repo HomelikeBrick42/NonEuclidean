@@ -59,6 +59,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc7eb209b1518d6bb87b283c20095f5228ecda460da70b44f0802523dea6da04"
 
 [[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "bytemuck",
+ "gpu-allocator",
+ "rendering",
+ "scope-guard",
+ "winit",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -982,6 +994,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rendering"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "gpu-allocator",
+ "parking_lot",
+ "scope-guard",
+ "winit",
+]
+
+[[package]]
 name = "rustix"
 version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1261,18 +1284,6 @@ name = "tracing-core"
 version = "0.1.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
-
-[[package]]
-name = "triangle_based_rendering"
-version = "0.1.0"
-dependencies = [
- "ash",
- "bytemuck",
- "gpu-allocator",
- "parking_lot",
- "scope-guard",
- "winit",
-]
 
 [[package]]
 name = "ttf-parser"
