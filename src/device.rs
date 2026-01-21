@@ -19,6 +19,9 @@ pub enum ResourceToDestroy {
     Semaphore(vk::Semaphore),
     Fence(vk::Fence),
     Buffer(vk::Buffer, Allocation),
+    ShaderModule(vk::ShaderModule),
+    PipelineLayout(vk::PipelineLayout),
+    Pipeline(vk::Pipeline),
 }
 
 pub struct Device<'allocator> {
@@ -289,9 +292,18 @@ impl<'allocator> Device<'allocator> {
                     unsafe { self.destroy_fence(fence, allocator) };
                 }
                 ResourceToDestroy::Buffer(buffer, allocation) => {
-                    unsafe { self.destroy_buffer(buffer, self.allocator()) };
+                    unsafe { self.destroy_buffer(buffer, allocator) };
                     self.with_allocator(|allocator| allocator.free(allocation))
                         .unwrap();
+                }
+                ResourceToDestroy::ShaderModule(shader_module) => {
+                    unsafe { self.destroy_shader_module(shader_module, allocator) };
+                }
+                ResourceToDestroy::PipelineLayout(pipeline_layout) => {
+                    unsafe { self.destroy_pipeline_layout(pipeline_layout, allocator) };
+                }
+                ResourceToDestroy::Pipeline(pipeline) => {
+                    unsafe { self.destroy_pipeline(pipeline, allocator) };
                 }
             }
         }

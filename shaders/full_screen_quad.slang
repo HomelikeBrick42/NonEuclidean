@@ -1,0 +1,34 @@
+struct VertexOutput
+{
+    float4 clip_position : SV_Position;
+    float2 uv;
+}
+
+[shader("vertex")]
+VertexOutput vertex(uint vertex_index: SV_VertexID)
+{
+    var out : VertexOutput;
+
+    let x = float((vertex_index >> 0) & 1);
+    let y = float((vertex_index >> 1) & 1);
+    out.uv = float2(x, y);
+
+    out.clip_position = float4(out.uv * 2.0 - 1.0, 0.0, 1.0);
+
+    return out;
+}
+
+struct FragmentOutput
+{
+    float4 color : SV_Target;
+}
+
+[shader("fragment")]
+FragmentOutput fragment(VertexOutput in)
+{
+    var out : FragmentOutput;
+
+    out.color = float4(in.uv, 0.0, 1.0);
+
+    return out;
+}

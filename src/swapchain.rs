@@ -297,6 +297,8 @@ impl<'allocator, 'window> Swapchain<'allocator, 'window> {
         f: impl FnOnce(
             vk::CommandBuffer,
             &mut vk::ImageLayout,
+            u32,
+            u32,
             vk::Image,
             vk::ImageView,
             usize,
@@ -359,6 +361,8 @@ impl<'allocator, 'window> Swapchain<'allocator, 'window> {
         } = f(
             self.command_buffers[frame_index],
             &mut image_layout,
+            self.width,
+            self.height,
             self.images[image_index as usize],
             self.image_views[image_index as usize],
             frame_index,

@@ -92,6 +92,13 @@ impl<'allocator> Buffer<'allocator> {
         self.allocation.size()
     }
 
+    /// # Safety
+    /// This buffer must have been created with [vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS]
+    pub unsafe fn device_address(&self) -> vk::DeviceAddress {
+        let device_address_info = vk::BufferDeviceAddressInfo::default().buffer(self.buffer);
+        unsafe { self.device.get_buffer_device_address(&device_address_info) }
+    }
+
     pub fn as_ptr(&self) -> Option<NonNull<()>> {
         self.allocation.mapped_ptr().map(|ptr| ptr.cast())
     }
