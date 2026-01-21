@@ -18,7 +18,7 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let window = {
-        let attributes = WindowAttributes::default().with_title("Renderer");
+        let attributes = WindowAttributes::default().with_title("NonEuclidean Renderer");
         #[expect(deprecated)]
         event_loop.create_window(attributes).unwrap()
     };
@@ -40,7 +40,10 @@ fn main() {
         false,
     );
 
-    unsafe { buffer.get_mapped_mut() }.unwrap().fill(0);
+    {
+        let floats = bytemuck::cast_slice_mut::<u8, f32>(unsafe { buffer.get_mapped_mut() }.unwrap());
+        floats[0] = 0.5;
+    }
 
     let shader_create_info = vk::ShaderModuleCreateInfo::default().code(
         const {

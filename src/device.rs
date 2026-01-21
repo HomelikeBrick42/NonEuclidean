@@ -45,6 +45,7 @@ impl<'allocator> Device<'allocator> {
         let device_features = vk::PhysicalDeviceFeatures::default();
         let mut device_features11 = vk::PhysicalDeviceVulkan11Features::default();
         let mut device_features12 = vk::PhysicalDeviceVulkan12Features::default()
+            .shader_int8(true)
             .descriptor_indexing(true)
             .descriptor_binding_variable_descriptor_count(true)
             .runtime_descriptor_array(true)

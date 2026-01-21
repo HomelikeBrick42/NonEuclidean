@@ -23,12 +23,20 @@ struct FragmentOutput
     float4 color : SV_Target;
 }
 
+struct PushConstants
+{
+    float *buffer;
+}
+
+[vk::push_constant]
+PushConstants buffers;
+
 [shader("fragment")]
 FragmentOutput fragment(VertexOutput in)
 {
     var out : FragmentOutput;
 
-    out.color = float4(in.uv, 0.0, 1.0);
+    out.color = float4(in.uv, *buffers.buffer, 1.0);
 
     return out;
 }
