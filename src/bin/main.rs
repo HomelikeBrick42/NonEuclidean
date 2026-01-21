@@ -57,10 +57,12 @@ fn main() {
     #[repr(C)]
     struct PushConstants {
         buffer: vk::DeviceAddress,
+        aspect: f32,
+        padding: u32,
     }
 
     let push_constant_range = vk::PushConstantRange::default()
-        .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+        .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
         .offset(0)
         .size(size_of::<PushConstants>() as _);
 
@@ -191,10 +193,12 @@ fn main() {
             device.cmd_push_constants(
                 command_buffer,
                 *pipeline_layout,
-                vk::ShaderStageFlags::FRAGMENT,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 0,
                 bytemuck::bytes_of(&PushConstants {
                     buffer: buffer.device_address(),
+                    aspect: width as f32 / height as f32,
+                    padding: 0,
                 }),
             );
             device.cmd_draw(command_buffer, 4, 1, 0, 0);
