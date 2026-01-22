@@ -1,17 +1,52 @@
 use ash::vk;
-use bytemuck::{AnyBitPattern, NoUninit};
+use bytemuck::NoUninit;
 use gpu_allocator::MemoryLocation;
 use rendering::{
     Buffer, Device, Instance, RenderResult, RenderSync, ResourceToDestroy, Shader, Surface,
     Swapchain, include_spirv, transition_image,
 };
 use scope_guard::scope_guard;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 use winit::{
-    event::{Event, WindowEvent},
+    event::{Event, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     window::WindowAttributes,
 };
+
+#[derive(Clone, Copy, NoUninit)]
+#[repr(C)]
+struct Triangle {
+    // ax is 0
+    // ay is 0
+    bx: f32,
+    // by is 0
+    cx: f32,
+    cy: f32,
+
+    _padding1: u32,
+
+    edge_triangles: [u32; 3],
+    edge_indices: [u8; 3],
+
+    _padding2: u8,
+}
+
+#[derive(Clone, Copy, NoUninit)]
+#[repr(C)]
+struct Position {
+    offset_x: f32,
+    offset_y: f32,
+    triangle_index: u32,
+}
+
+#[derive(Clone, Copy, NoUninit)]
+#[repr(C)]
+struct PushConstants {
+    triangles: vk::DeviceAddress,
+    start_position: Position,
+    aspect: f32,
+}
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
@@ -31,33 +66,30 @@ fn main() {
     let device = Arc::new(Device::new(instance.clone()));
     let mut swapchain = Swapchain::new(device.clone(), surface);
 
-    #[derive(Clone, Copy, NoUninit)]
-    #[repr(C)]
-    struct Triangle {
-        // ax is 0
-        // ay is 0
-        bx: f32,
-        // by is 0
-        cx: f32,
-        cy: f32,
+    let triangles = [
+        Triangle {
+            bx: 2.0,
+            cx: 1.0,
+            cy: 2.0,
 
-        _padding1: u32,
+            edge_triangles: [1, 1, 1],
+            edge_indices: [0, 1, 2],
 
-        edge_triangles: [u32; 3],
-        edge_indices: [u8; 3],
+            _padding1: 0,
+            _padding2: 0,
+        },
+        Triangle {
+            bx: 2.0,
+            cx: 1.0,
+            cy: 2.0,
 
-        _padding2: u8,
-    }
+            edge_triangles: [0, 0, 0],
+            edge_indices: [0, 1, 2],
 
-    let triangles = [Triangle {
-        bx: 2.0,
-        cx: 1.0,
-        cy: 1.0,
-        _padding1: 0,
-        edge_triangles: [u32::MAX; 3],
-        edge_indices: [u8::MAX; 3],
-        _padding2: 0,
-    }];
+            _padding1: 0,
+            _padding2: 0,
+        },
+    ];
 
     let mut triangles_buffer = Buffer::new(
         device.clone(),
@@ -79,14 +111,6 @@ fn main() {
             include_spirv!(concat!(env!("OUT_DIR"), "/shaders/full_screen_quad.spv")),
         )
     };
-
-    #[derive(Clone, Copy, NoUninit)]
-    #[repr(C)]
-    struct PushConstants {
-        triangles: vk::DeviceAddress,
-        aspect: f32,
-        _padding1: u32,
-    }
 
     let push_constant_range = vk::PushConstantRange::default()
         .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
@@ -147,7 +171,7 @@ fn main() {
         .dynamic_state(&dynamic_state)
         .layout(*pipeline_layout);
 
-    let pipline = scope_guard!(
+    let pipeline = scope_guard!(
         |pipeline| unsafe {
             device.schedule_destroy_resource(
                 device.current_timeline_counter(),
@@ -166,80 +190,25 @@ fn main() {
 
     drop(shader);
 
-    let render = |command_buffer: vk::CommandBuffer,
-                  image_layout: &mut vk::ImageLayout,
-                  width: u32,
-                  height: u32,
-                  image: vk::Image,
-                  image_view: vk::ImageView,
-                  #[expect(unused)] frame_index: usize| {
-        unsafe {
-            transition_image(
-                &device,
-                command_buffer,
-                image,
-                image_layout,
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            );
-        }
-
-        let color_attachment_info = vk::RenderingAttachmentInfo::default()
-            .image_view(image_view)
-            .image_layout(*image_layout)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .clear_value(vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [1.0, 0.0, 1.0, 1.0],
-                },
-            });
-        let rendering_info = vk::RenderingInfo::default()
-            .render_area(vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: vk::Extent2D { width, height },
-            })
-            .layer_count(1)
-            .color_attachments(core::slice::from_ref(&color_attachment_info));
-        unsafe { device.cmd_begin_rendering(command_buffer, &rendering_info) };
-
-        let viewport = vk::Viewport::default()
-            .x(0.0)
-            .y(height as f32)
-            .width(width as _)
-            .height(-(height as f32));
-        unsafe { device.cmd_set_viewport(command_buffer, 0, &[viewport]) };
-
-        let scissor = vk::Rect2D {
-            offset: vk::Offset2D { x: 0, y: 0 },
-            extent: vk::Extent2D { width, height },
-        };
-        unsafe { device.cmd_set_scissor(command_buffer, 0, &[scissor]) };
-
-        unsafe {
-            device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, *pipline);
-            device.cmd_push_constants(
-                command_buffer,
-                *pipeline_layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                0,
-                bytemuck::bytes_of(&PushConstants {
-                    triangles: triangles_buffer.device_address(),
-                    aspect: width as f32 / height as f32,
-                    _padding1: 0,
-                }),
-            );
-            device.cmd_draw(command_buffer, 4, 1, 0, 0);
-        }
-
-        unsafe { device.cmd_end_rendering(command_buffer) };
-
-        RenderSync {
-            wait_sempahore_info: None,
-            signal_sempahore_info: None,
-        }
+    let mut position = Position {
+        offset_x: 0.5,
+        offset_y: 0.5,
+        triangle_index: 0,
     };
 
+    let mut last_time = Instant::now();
+    let mut dt = 0.0;
+    let mut w_pressed = false;
+    let mut s_pressed = false;
+    let mut a_pressed = false;
+    let mut d_pressed = false;
     let run = |event: Event<()>, event_loop: &ActiveEventLoop| match event {
+        Event::NewEvents(_) => {
+            let time = Instant::now();
+            dt = (time - last_time).as_secs_f32();
+            last_time = time;
+        }
+
         Event::WindowEvent { window_id, event } if window_id == window.id() => match event {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
 
@@ -247,8 +216,50 @@ fn main() {
                 device.destroy_resources();
 
                 swapchain.resize(size.width, size.height);
-                swapchain.try_next_frame(render);
+                swapchain.try_next_frame(
+                    |command_buffer: vk::CommandBuffer,
+                     image_layout: &mut vk::ImageLayout,
+                     width: u32,
+                     height: u32,
+                     image: vk::Image,
+                     image_view: vk::ImageView,
+                     frame_index: usize| {
+                        unsafe {
+                            render(
+                                &device,
+                                *pipeline_layout,
+                                *pipeline,
+                                &triangles_buffer,
+                                command_buffer,
+                                image_layout,
+                                width,
+                                height,
+                                image,
+                                image_view,
+                                frame_index,
+                                position,
+                            )
+                        }
+                    },
+                );
             }
+
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(code),
+                        state,
+                        ..
+                    },
+                is_synthetic: _,
+            } => match code {
+                KeyCode::KeyW => w_pressed = state.is_pressed(),
+                KeyCode::KeyS => s_pressed = state.is_pressed(),
+                KeyCode::KeyA => a_pressed = state.is_pressed(),
+                KeyCode::KeyD => d_pressed = state.is_pressed(),
+                _ => {}
+            },
 
             _ => {}
         },
@@ -256,7 +267,46 @@ fn main() {
         Event::AboutToWait => {
             device.destroy_resources();
 
-            match swapchain.try_next_frame(render) {
+            let speed = 1.0;
+            if w_pressed {
+                position.offset_y += speed * dt;
+            }
+            if s_pressed {
+                position.offset_y -= speed * dt;
+            }
+            if a_pressed {
+                position.offset_x -= speed * dt;
+            }
+            if d_pressed {
+                position.offset_x += speed * dt;
+            }
+
+            match swapchain.try_next_frame(
+                |command_buffer: vk::CommandBuffer,
+                 image_layout: &mut vk::ImageLayout,
+                 width: u32,
+                 height: u32,
+                 image: vk::Image,
+                 image_view: vk::ImageView,
+                 frame_index: usize| {
+                    unsafe {
+                        render(
+                            &device,
+                            *pipeline_layout,
+                            *pipeline,
+                            &triangles_buffer,
+                            command_buffer,
+                            image_layout,
+                            width,
+                            height,
+                            image,
+                            image_view,
+                            frame_index,
+                            position,
+                        )
+                    }
+                },
+            ) {
                 RenderResult::NotReady => {}
                 RenderResult::OutOfDate | RenderResult::Suboptimal => {
                     let size = window.inner_size();
@@ -270,4 +320,85 @@ fn main() {
     };
     #[expect(deprecated)]
     event_loop.run(run).unwrap();
+}
+
+#[expect(clippy::too_many_arguments)]
+unsafe fn render<'a>(
+    device: &Device<'_>,
+    pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
+    triangles_buffer: &Buffer,
+    command_buffer: vk::CommandBuffer,
+    image_layout: &mut vk::ImageLayout,
+    width: u32,
+    height: u32,
+    image: vk::Image,
+    image_view: vk::ImageView,
+    #[expect(unused)] frame_index: usize,
+    position: Position,
+) -> RenderSync<'a> {
+    unsafe {
+        transition_image(
+            device,
+            command_buffer,
+            image,
+            image_layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+    }
+
+    let color_attachment_info = vk::RenderingAttachmentInfo::default()
+        .image_view(image_view)
+        .image_layout(*image_layout)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .clear_value(vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [1.0, 0.0, 1.0, 1.0],
+            },
+        });
+    let rendering_info = vk::RenderingInfo::default()
+        .render_area(vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: vk::Extent2D { width, height },
+        })
+        .layer_count(1)
+        .color_attachments(core::slice::from_ref(&color_attachment_info));
+    unsafe { device.cmd_begin_rendering(command_buffer, &rendering_info) };
+
+    let viewport = vk::Viewport::default()
+        .x(0.0)
+        .y(height as f32)
+        .width(width as _)
+        .height(-(height as f32));
+    unsafe { device.cmd_set_viewport(command_buffer, 0, &[viewport]) };
+
+    let scissor = vk::Rect2D {
+        offset: vk::Offset2D { x: 0, y: 0 },
+        extent: vk::Extent2D { width, height },
+    };
+    unsafe { device.cmd_set_scissor(command_buffer, 0, &[scissor]) };
+
+    unsafe {
+        device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+        device.cmd_push_constants(
+            command_buffer,
+            pipeline_layout,
+            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            0,
+            bytemuck::bytes_of(&PushConstants {
+                triangles: triangles_buffer.device_address(),
+                start_position: position,
+                aspect: width as f32 / height as f32,
+            }),
+        );
+        device.cmd_draw(command_buffer, 4, 1, 0, 0);
+    }
+
+    unsafe { device.cmd_end_rendering(command_buffer) };
+
+    RenderSync {
+        wait_sempahore_info: None,
+        signal_sempahore_info: None,
+    }
 }
